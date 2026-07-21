@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# install.sh — install claude-grid on any Linux system.
+# install.sh — install tmux-grid on any Linux system.
 #
-# Copies the launcher into ~/.local/bin and writes a GNOME desktop entry
-# into ~/.local/share/applications with the correct absolute path.
+# Symlinks the launcher into ~/.local/bin so the repo checkout stays the
+# single source of truth: editing the script in the repo (or `git pull`ing
+# it) takes effect immediately, with no reinstall. Also writes a GNOME
+# desktop entry into ~/.local/share/applications with the correct path.
 #
 # Requirements: tmux and Ptyxis (GNOME's terminal, ptyxis(1)). Install with
 # your package manager, e.g.  sudo apt install tmux ptyxis
@@ -14,23 +16,25 @@ APPS="$HOME/.local/share/applications"
 SRC="$(cd "$(dirname "$0")" && pwd)"
 
 mkdir -p "$BIN" "$APPS"
-install -m 0755 "$SRC/claude-grid" "$BIN/claude-grid"
+
+# Symlink, not copy: the repo checkout is the single source of truth.
+ln -sfn "$SRC/tmux-grid" "$BIN/tmux-grid"
 
 # Write the desktop entry with an absolute Exec path (.desktop does not
 # expand ~ or $HOME).
-cat > "$APPS/claude-grid.desktop" <<EOF
+cat > "$APPS/tmux-grid.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=Claude Grid
-Comment=Open the 2x2 tmux grid of terminals in Ptyxis
-Exec=$BIN/claude-grid
+Name=Tmux Grid
+Comment=Open a 2x2 tmux grid of terminals in Ptyxis
+Exec=$BIN/tmux-grid
 Icon=utilities-terminal
 Terminal=false
 Categories=Utility;TerminalEmulator;
 EOF
 
-echo "claude-grid installed to $BIN/claude-grid"
-echo "desktop entry written to $APPS/claude-grid.desktop"
+echo "tmux-grid symlinked: $BIN/tmux-grid -> $SRC/tmux-grid"
+echo "desktop entry written: $APPS/tmux-grid.desktop"
 
 case ":$PATH:" in
     *":$BIN:"*) ;;
