@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# claude-grid — open a Ptyxis window with a tmux session split into a 2x2
+# grid of shells, all starting in START_DIR.
+#
+# Usage:
+#   claude-grid              open the default grid (or re-attach to it)
+#   claude-grid NAME         open a SEPARATE grid named NAME (its own window
+#                            and tmux session) — run it again to attach
+#   claude-grid ls           list every open grid and how to re-attach
+#   claude-grid add  [NAME]  re-add missing panes back up to a full 2x2 grid
+#                            (use after you `exit` a pane by accident)
+#   claude-grid fix  [NAME]  redraw every pane, for a clipped/offset TUI
+#   claude-grid layout [NAME] restore the even 2x2 grid after panes drifted
+#
+# Each NAME is an independent tmux session, so you can have several grids
+# open at once. Running claude-grid for an existing NAME re-attaches (nothing
+# is duplicated). To start one over: tmux kill-session -t claude-grid[-NAME]
+
+set -euo pipefail
+
+START_DIR="$HOME/proj"
+PANES=4
+
+if ! command -v tmux >/dev/null; then
+    echo "claude-grid: tmux is not installed. Run: sudo apt install tmux" >&2
+    exit 1
+fi
+
+# First arg may be a subcommand; the remaining arg (if any) names the grid.
+cmd=""
+case "${1:-}" in
+    ls|list)
+        # Show every open grid and the exact command to re-attach to it.
+        found=""
+        for s in $(tmux ls -F '#{session_name}' 2>/dev/null | grep -E '^claude-grid(-|$)'); do
+            found="yes"
+            case "$s" in
+                claude-grid)   echo "  claude-grid            (default)" ;;
+                claude-grid-*) echo "  claude-grid ${s#claude-grid-}" ;;
+            esac
+        done
+        [ -z "$found" ] && echo "  (no grids open)"
+        exit 0
+        ;;
+    add|fix|layout) cmd="$1"; shift ;;
+esac
+
+if [ -n "${1:-}" ]; then
+    SESSION="claude-grid-$1"
+else
+    SESSION="claude-grid"
+fi
+
+if [ "$cmd" = "add" ]; then
+    # Refill the grid back up to PANES panes and re-tile. Useful after you
+    # `exit` a pane by accident: the remaining panes (e.g. running claude)
+    # are untouched, only the missing ones are re-created in START_DIR.
+    if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+        echo "claude-grid: no grid '$SESSION' open (start one with: claude-grid ${1:-})" >&2
+        exit 1
+    fi
+    have=$(tmux list-panes -t "$SESSION:" | wc -l)
+    while [ "$have" -lt "$PANES" ]; do
+        tmux split-window -t "$SESSION:" -c "$START_DIR"
+        tmux select-layout -t "$SESSION:" tiled
+        have=$((have + 1))
+    done
+    echo "claude-grid: grid refilled to $PANES panes ($SESSION)"
+    exit 0
+fi
+
+if [ "$cmd" = "layout" ]; then
+    tmux select-layout -t "$SESSION:" tiled
+    echo "claude-grid: even grid restored ($SESSION)"
+    exit 0
+fi
+
+if [ "$cmd" = "fix" ]; then
+    # Jiggle each pane's height by 2 rows and back: the size change forces
+    # the TUI inside to re-measure and repaint its full frame.
+    for p in $(tmux list-panes -t "$SESSION:" -F '#{pane_index}'); do
+        tmux resize-pane -t "$SESSION:.$p" -U 2
+        tmux resize-pane -t "$SESSION:.$p" -D 2
+    done
+    echo "claude-grid: all panes redrawn ($SESSION)"
+    exit 0
+fi
+
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+    tmux new-session -d -s "$SESSION" -c "$START_DIR"
+    for _ in $(seq 2 "$PANES"); do
+        tmux split-window -t "$SESSION:" -c "$START_DIR"
+        tmux select-layout -t "$SESSION:" tiled
+    done
+    tmux select-pane -t "$SESSION:.0"
+
+    # Session/window-scoped options only — no global tmux config is touched.
+    tmux set-option  -t "$SESSION" status off
+    tmux set-option  -t "$SESSION" mouse on
+    tmux set-option  -t "$SESSION" set-titles on
+    tmux set-option  -t "$SESSION" set-titles-string "#{pane_title} — $SESSION"
+    # Pane border shows the pane's current directory (updates as you cd).
+    tmux set-option -w -t "$SESSION:" pane-border-status top
+    tmux set-option -w -t "$SESSION:" pane-border-format ' #{b:pane_current_path} '
+    # Keep the 4 panes equal as you stretch the window: re-tile on resize.
+    tmux set-hook -t "$SESSION" client-resized 'select-layout tiled'
+fi
+
+# No --maximize: Ptyxis restores the last window size the user set.
+# setsid -f detaches the window from whatever launched it, so closing the
+# launching terminal (or Ctrl+C) never takes the grid down with it.
+setsid -f ptyxis -- tmux attach-session -t "$SESSION" >/dev/null 2>&1
