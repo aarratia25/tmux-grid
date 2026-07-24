@@ -119,7 +119,10 @@ if ! tmux has-session -t "$SESSION" 2>/dev/null; then
 
     # Session/window-scoped options only — no global tmux config is touched.
     tmux set-option  -t "$SESSION" status off
-    tmux set-option  -t "$SESSION" mouse on
+    # mouse off: keep native terminal select/copy/paste and right-click menu.
+    # With mouse on, tmux hijacks the mouse (right-click opens tmux's own menu,
+    # drag-select goes to tmux copy-mode) which breaks normal paste.
+    tmux set-option  -t "$SESSION" mouse off
     tmux set-option  -t "$SESSION" set-titles on
     tmux set-option  -t "$SESSION" set-titles-string "#{pane_title} — $SESSION"
     # Pane border shows the pane's current directory (updates as you cd).
