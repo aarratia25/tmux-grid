@@ -44,6 +44,32 @@ only source of truth — there is never a second copy that can drift:
 - **Pull changes made elsewhere:** run `tmux-grid update` — it `git pull`s the
   clone and re-runs `install.sh`, so the machine matches the repo exactly.
 
+## Crash/reboot persistence (optional)
+
+If your machine sometimes freezes or reboots on its own, install with
+persistence so you don't lose your grids:
+
+```sh
+./install.sh --persist
+```
+
+This adds [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect) +
+[tmux-continuum](https://github.com/tmux-plugins/tmux-continuum), configured to:
+
+- **autosave every 5 minutes** (no manual action), including the visible text
+  of every pane;
+- **auto-restore** the saved state when the tmux server starts after a reboot;
+- start the tmux server at login (a headless autostart) so the restore happens
+  before you open the grid.
+
+**What comes back:** the sessions, the 2×2 layout, each pane's working
+directory, and the on-screen text of every pane. **What does not:** live
+processes (a running build, etc.). A `claude` session comes back in its folder;
+resume it with `claude --resume`.
+
+It appends a small **marked block** to `~/.tmux.conf` (it never overwrites your
+existing config) and installs the plugins under `~/.tmux/plugins`.
+
 ## Usage
 
 ```

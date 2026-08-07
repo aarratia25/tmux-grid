@@ -116,22 +116,25 @@ if ! tmux has-session -t "$SESSION" 2>/dev/null; then
         tmux select-layout -t "$SESSION:" tiled
     done
     tmux select-pane -t "$SESSION:.0"
-
-    # Session/window-scoped options only — no global tmux config is touched.
-    tmux set-option  -t "$SESSION" status off
-    # mouse on: click switches pane, drag a border resizes. tmux captures the
-    # mouse, so for the terminal's own copy/paste use the keyboard or Shift:
-    # paste with Ctrl+Shift+V, select/copy with Shift+drag, native right-click
-    # menu with Shift+right-click.
-    tmux set-option  -t "$SESSION" mouse on
-    tmux set-option  -t "$SESSION" set-titles on
-    tmux set-option  -t "$SESSION" set-titles-string "#{pane_title} — $SESSION"
-    # Pane border shows the pane's current directory (updates as you cd).
-    tmux set-option -w -t "$SESSION:" pane-border-status top
-    tmux set-option -w -t "$SESSION:" pane-border-format ' #{b:pane_current_path} '
-    # Keep the 4 panes equal as you stretch the window: re-tile on resize.
-    tmux set-hook -t "$SESSION" client-resized 'select-layout tiled'
 fi
+
+# Apply the look every run, not just on create: a session restored by
+# tmux-resurrect after a crash/reboot comes back WITHOUT these session options
+# and hooks, so re-applying here makes the restored grid look like a fresh one.
+# Session/window-scoped options only — no global tmux config is touched.
+tmux set-option  -t "$SESSION" status off
+# mouse on: click switches pane, drag a border resizes. tmux captures the
+# mouse, so for the terminal's own copy/paste use the keyboard or Shift:
+# paste with Ctrl+Shift+V, select/copy with Shift+drag, native right-click
+# menu with Shift+right-click.
+tmux set-option  -t "$SESSION" mouse on
+tmux set-option  -t "$SESSION" set-titles on
+tmux set-option  -t "$SESSION" set-titles-string "#{pane_title} — $SESSION"
+# Pane border shows the pane's current directory (updates as you cd).
+tmux set-option -w -t "$SESSION:" pane-border-status top
+tmux set-option -w -t "$SESSION:" pane-border-format ' #{b:pane_current_path} '
+# Keep the 4 panes equal as you stretch the window: re-tile on resize.
+tmux set-hook -t "$SESSION" client-resized 'select-layout tiled'
 
 # No --maximize: Ptyxis restores the last window size the user set.
 # setsid -f detaches the window from whatever launched it, so closing the
