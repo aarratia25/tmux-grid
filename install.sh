@@ -73,8 +73,9 @@ if [ "$PERSIST" = "1" ]; then
 # >>> tmux-grid persistence >>>
 # Crash/reboot recovery via tmux-resurrect + tmux-continuum.
 # Options must precede the run-shell lines so the plugins read them on load.
+# Periodic SAVING is done by a systemd user timer (see install.sh --persist),
+# NOT by continuum, whose autosave needs the status bar that tmux-grid hides.
 set -g @resurrect-capture-pane-contents 'on'
-set -g @continuum-save-interval '5'
 set -g @continuum-restore 'on'
 run-shell ~/.tmux/plugins/tmux-resurrect/resurrect.tmux
 run-shell ~/.tmux/plugins/tmux-continuum/continuum.tmux
@@ -96,7 +97,35 @@ X-GNOME-Autostart-enabled=true
 NoDisplay=true
 DESK
     echo "  login autostart installed"
-    echo "  persistence ready: autosave every 5 min, auto-restore on tmux start"
+
+    # 4) systemd user timer: the real periodic save. Independent of the status
+    # bar (which tmux-grid hides), unlike continuum's own autosave.
+    mkdir -p "$HOME/.config/systemd/user"
+    cat > "$HOME/.config/systemd/user/tmux-resurrect-save.service" <<'SVC'
+[Unit]
+Description=Save tmux sessions (tmux-resurrect) for crash recovery
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -lc 'tmux run-shell "$HOME/.tmux/plugins/tmux-resurrect/scripts/save.sh" 2>/dev/null || true'
+SVC
+    cat > "$HOME/.config/systemd/user/tmux-resurrect-save.timer" <<'TMR'
+[Unit]
+Description=Periodically save tmux sessions for crash recovery
+
+[Timer]
+OnActiveSec=1min
+OnUnitActiveSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TMR
+    systemctl --user daemon-reload 2>/dev/null || true
+    systemctl --user enable --now tmux-resurrect-save.timer 2>/dev/null || true
+    echo "  systemd save timer enabled (every 5 min)"
+
+    echo "  persistence ready: save every 5 min (systemd), auto-restore on tmux start"
 fi
 
 case ":$PATH:" in
