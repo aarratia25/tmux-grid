@@ -30,6 +30,30 @@ if ! command -v tmux >/dev/null; then
     exit 1
 fi
 
+# Absolute path to this script, so the pane-exited hook can call back into it.
+SELF="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+
+# Internal mode: `tmux-grid _refill SESSION` refills SESSION back up to PANES
+# panes and re-tiles. Called by the pane-exited hook (see below) so a closed
+# pane reappears automatically. Not meant for interactive use.
+if [ "${1:-}" = "_refill" ]; then
+    rs="${2:-}"
+    if [ -z "$rs" ] || ! tmux has-session -t "$rs" 2>/dev/null; then
+        exit 0
+    fi
+    # Add one pane at a time until we're back to PANES. Kept intentionally
+    # simple and stateless (no locking): closing panes one at a time — the real
+    # case — never races. Two panes closed in the very same instant could
+    # briefly overshoot; `select-layout tiled` still lays them out evenly.
+    have=$(tmux list-panes -t "$rs:" 2>/dev/null | wc -l)
+    while [ "$have" -lt "$PANES" ]; do
+        tmux split-window -t "$rs:" -c "$START_DIR" 2>/dev/null || break
+        tmux select-layout -t "$rs:" tiled 2>/dev/null || true
+        have=$((have + 1))
+    done
+    exit 0
+fi
+
 # First arg may be a subcommand; the remaining arg (if any) names the grid.
 cmd=""
 case "${1:-}" in
@@ -161,6 +185,10 @@ tmux set-option -w -t "$SESSION:" pane-border-status top
 tmux set-option -w -t "$SESSION:" pane-border-format ' #{b:pane_current_path} '
 # Keep the 4 panes equal as you stretch the window: re-tile on resize.
 tmux set-hook -t "$SESSION" client-resized 'select-layout tiled'
+# Auto-refill: if a pane is closed (exit / Ctrl+b x), bring the grid back to
+# PANES panes automatically. To close the whole grid, close the window or
+# `tmux kill-session -t SESSION` instead.
+tmux set-hook -t "$SESSION" pane-exited "run-shell -b '$SELF _refill #{session_name}'"
 
 # No --maximize: Ptyxis restores the last window size the user set.
 # setsid -f detaches the window from whatever launched it, so closing the

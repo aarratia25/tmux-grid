@@ -93,6 +93,10 @@ tmux-grid update       pull the repo and re-install (see above)
 
 ### Notes
 
+- **Auto-refill.** If you close a pane (`exit` or `Ctrl+b x`), the grid
+  automatically refills back to 4 panes (a `pane-exited` hook). To close the
+  whole grid, close the window or `tmux kill-session -t tmux-grid[-NAME]`.
+  You can also refill on demand with `tmux-grid add`.
 - **Persistence.** Closing the Ptyxis window does **not** kill the grid — the
   tmux session keeps running in the background. Re-run the same command to
   re-attach with everything intact. To remove one for good:
