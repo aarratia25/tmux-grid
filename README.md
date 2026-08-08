@@ -53,19 +53,20 @@ persistence so you don't lose your grids:
 ./install.sh --persist
 ```
 
-This adds [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect) +
-[tmux-continuum](https://github.com/tmux-plugins/tmux-continuum), configured to:
+This sets up [tmux-resurrect](https://github.com/tmux-plugins/tmux-resurrect),
+configured to:
 
 - **save every 5 minutes** (no manual action), including the visible text of
   every pane — via a **systemd user timer** (`tmux-resurrect-save.timer`);
-- **auto-restore** the saved state when the tmux server starts after a reboot;
-- start the tmux server at login (a headless autostart) so the restore happens
-  before you open the grid.
+- **restore** the last saved state the next time you open a grid after a
+  reboot — driven explicitly by `tmux-grid` and by a headless login autostart
+  (both call tmux-resurrect's `restore.sh`).
 
-> The periodic save runs from a systemd timer rather than tmux-continuum's
-> built-in autosave, because continuum's autosave is driven by the status bar —
-> which tmux-grid hides (`status off`), so it would never fire. The restore
-> half of continuum works fine without the status bar and is kept.
+> Both save and restore are driven explicitly rather than through
+> tmux-continuum. Continuum's autosave hooks into the status bar, which
+> tmux-grid hides (`status off`) so it never fires; and its auto-restore proved
+> unreliable in testing. Driving `save.sh` / `restore.sh` directly is simpler
+> and verifiable.
 
 **What comes back:** the sessions, the 2×2 layout, each pane's working
 directory, and the on-screen text of every pane. **What does not:** live

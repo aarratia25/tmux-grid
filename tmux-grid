@@ -109,6 +109,32 @@ if [ "$cmd" = "fix" ]; then
     exit 0
 fi
 
+# Crash-recovery: if the tmux server is down but a saved state exists (e.g.
+# after a reboot), restore it explicitly BEFORE deciding to create a fresh
+# grid, so we re-attach to the saved grids instead of empty ones. We drive the
+# restore ourselves (tmux-resurrect's restore.sh) rather than relying on
+# tmux-continuum's auto-restore, which is unreliable. If the server is already
+# up we skip this — no restore is wanted, and it avoids a delay when opening a
+# second grid.
+RESURRECT_RESTORE="$HOME/.tmux/plugins/tmux-resurrect/scripts/restore.sh"
+RESURRECT_LAST="${XDG_DATA_HOME:-$HOME/.local/share}/tmux/resurrect/last"
+if ! tmux ls >/dev/null 2>&1 && [ -e "$RESURRECT_LAST" ] && [ -x "$RESURRECT_RESTORE" ]; then
+    # A bare `tmux start-server` dies immediately (a server with no sessions
+    # doesn't stay up), so hold the server up with a throwaway session, load
+    # the config (start-server/new-session don't source ~/.tmux.conf on their
+    # own here), run the restore, wait for our session to reappear, then drop
+    # the throwaway. If nothing was restored, killing it lets the server exit
+    # and the normal create path below builds a fresh grid.
+    tmux new-session -d -s _tmuxgrid_restore 2>/dev/null || true
+    tmux source-file "$HOME/.tmux.conf" 2>/dev/null || true
+    tmux run-shell "$RESURRECT_RESTORE" 2>/dev/null || true
+    for _ in $(seq 1 20); do
+        tmux has-session -t "$SESSION" 2>/dev/null && break
+        sleep 0.25
+    done
+    tmux kill-session -t _tmuxgrid_restore 2>/dev/null || true
+fi
+
 if ! tmux has-session -t "$SESSION" 2>/dev/null; then
     tmux new-session -d -s "$SESSION" -c "$START_DIR"
     for _ in $(seq 2 "$PANES"); do

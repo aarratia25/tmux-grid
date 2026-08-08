@@ -48,20 +48,19 @@ echo "tmux-grid symlinked: $BIN/tmux-grid -> $SRC/tmux-grid"
 echo "desktop entry written: $APPS/tmux-grid.desktop"
 
 if [ "$PERSIST" = "1" ]; then
-    echo "setting up session persistence (tmux-resurrect + tmux-continuum)…"
+    echo "setting up session persistence (tmux-resurrect)…"
 
-    # 1) Plugins (manual install, no TPM).
+    # 1) Plugin (manual install, no TPM). Only tmux-resurrect: save/restore are
+    #    driven explicitly (systemd timer + restore.sh); continuum is not used.
     mkdir -p "$HOME/.tmux/plugins"
-    for p in tmux-resurrect tmux-continuum; do
-        d="$HOME/.tmux/plugins/$p"
-        if [ -d "$d/.git" ]; then
-            git -C "$d" pull --ff-only -q || true
-            echo "  updated $p"
-        else
-            git clone --depth 1 -q "https://github.com/tmux-plugins/$p" "$d"
-            echo "  cloned  $p"
-        fi
-    done
+    d="$HOME/.tmux/plugins/tmux-resurrect"
+    if [ -d "$d/.git" ]; then
+        git -C "$d" pull --ff-only -q || true
+        echo "  updated tmux-resurrect"
+    else
+        git clone --depth 1 -q "https://github.com/tmux-plugins/tmux-resurrect" "$d"
+        echo "  cloned  tmux-resurrect"
+    fi
 
     # 2) ~/.tmux.conf: append a marked block, never overwrite existing config.
     CONF="$HOME/.tmux.conf"
@@ -71,27 +70,27 @@ if [ "$PERSIST" = "1" ]; then
         if [ -s "$CONF" ]; then printf '\n' >> "$CONF"; fi
         cat >> "$CONF" <<'TMUXCONF'
 # >>> tmux-grid persistence >>>
-# Crash/reboot recovery via tmux-resurrect + tmux-continuum.
-# Options must precede the run-shell lines so the plugins read them on load.
-# Periodic SAVING is done by a systemd user timer (see install.sh --persist),
-# NOT by continuum, whose autosave needs the status bar that tmux-grid hides.
+# Crash/reboot recovery via tmux-resurrect.
+# Saving runs from a systemd user timer (see below); restoring is explicit
+# (the login autostart and the tmux-grid launcher call restore.sh).
+# tmux-continuum is intentionally not used: its autosave needs the status bar
+# tmux-grid hides, and its auto-restore proved unreliable.
 set -g @resurrect-capture-pane-contents 'on'
-set -g @continuum-restore 'on'
 run-shell ~/.tmux/plugins/tmux-resurrect/resurrect.tmux
-run-shell ~/.tmux/plugins/tmux-continuum/continuum.tmux
 # <<< tmux-grid persistence <<<
 TMUXCONF
         echo "  added persistence block to $CONF"
     fi
 
-    # 3) Headless login autostart: start the tmux server so continuum restores.
+    # 3) Headless login autostart: if no tmux server is running, start one and
+    #    restore the last saved sessions explicitly.
     mkdir -p "$HOME/.config/autostart"
     cat > "$HOME/.config/autostart/tmux-grid-restore.desktop" <<'DESK'
 [Desktop Entry]
 Type=Application
 Name=tmux session restore
-Comment=Start the tmux server at login so tmux-continuum restores saved sessions (crash/reboot recovery). Headless — opens no window.
-Exec=bash -lc "tmux start-server"
+Comment=After login, if no tmux server is running, restore the last saved sessions (crash/reboot recovery). Headless — opens no window.
+Exec=bash -lc 'tmux ls >/dev/null 2>&1 || { tmux new-session -d -s _tmuxgrid_restore && tmux source-file "$HOME/.tmux.conf" && tmux run-shell "$HOME/.tmux/plugins/tmux-resurrect/scripts/restore.sh" && sleep 3 && tmux kill-session -t _tmuxgrid_restore 2>/dev/null; }'
 Terminal=false
 X-GNOME-Autostart-enabled=true
 NoDisplay=true
@@ -125,7 +124,7 @@ TMR
     systemctl --user enable --now tmux-resurrect-save.timer 2>/dev/null || true
     echo "  systemd save timer enabled (every 5 min)"
 
-    echo "  persistence ready: save every 5 min (systemd), auto-restore on tmux start"
+    echo "  persistence ready: save every 5 min (systemd), explicit restore on login/launcher"
 fi
 
 case ":$PATH:" in
